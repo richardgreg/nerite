@@ -1,0 +1,83 @@
+name: Frontend CI
+
+# This workflow:
+# - Runs build verification for the frontend app
+# - Runs tests to ensure functionality works
+# - Runs linting to maintain code quality
+# - Triggers on PRs that modify frontend code
+
+defaults:
+  run:
+    working-directory: frontend/app
+
+env:
+  CI: true
+  FORCE_COLOR: true
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/frontend-ci.yml"
+      - "frontend/app/**"
+      - "frontend/uikit/**"
+      - "pnpm-lock.yaml"
+
+jobs:
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3.0.0
+        with:
+          version: 8
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".node-version"
+          cache: "pnpm"
+          cache-dependency-path: "pnpm-lock.yaml"
+
+      - name: Set up environment variables for build
+        run: |
+          # Copy from .env.example to get all required variables
+          cp .env.example .env.local
+          # Override with CI-specific values for demo mode
+          cat >> .env.local << EOF
+          
+          # CI overrides for demo mode build
+          NEXT_PUBLIC_DEMO_MODE=true
+          NEXT_PUBLIC_VERCEL_ANALYTICS=false
+          NEXT_PUBLIC_ACCOUNT_SCREEN=false
+          NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=test-wallet-connect-id-for-ci
+          NEXT_PUBLIC_CHAIN_RPC_URL=https://arb1.arbitrum.io/rpc
+          # Use placeholder for subgraph URL to enable demo mode fallback
+          NEXT_PUBLIC_SUBGRAPH_URL=https://api.studio.thegraph.com/query/placeholder/placeholder/version/latest
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build dependencies (skip GraphQL codegen in CI)
+        run: |
+          # Build UIKit first
+          pnpm build-uikit
+          # Create banner file if it doesn't exist
+          pnpm build-banner
+          # Build Panda CSS
+          pnpm build-panda
+          # Note: Skipping GraphQL codegen since generated files already exist
+
+      - name: Build application
+        run: pnpm next build
+
+      - name: Run tests
+        run: pnpm vitest run
+
+      - name: Run linting
+        run: pnpm lint
